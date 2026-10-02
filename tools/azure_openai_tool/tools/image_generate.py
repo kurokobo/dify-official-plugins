@@ -72,8 +72,8 @@ class ImageGenerateTool(Tool):
         # --- Process Response --- 
         # Prepare metadata with token usage if available
         metadata = {"mime_type": None}  # Will be set per image
-        if hasattr(response, 'usage'):
-            usage = response.usage
+        usage = getattr(response, "usage", None)
+        if usage is not None:
             metadata.update({
                 "token_usage": {
                     "total_tokens": usage.total_tokens,
@@ -81,8 +81,8 @@ class ImageGenerateTool(Tool):
                     "output_tokens": usage.output_tokens
                 }
             })
-            if hasattr(usage, 'input_tokens_details'):
-                details = usage.input_tokens_details
+            details = getattr(usage, "input_tokens_details", None)
+            if details is not None:
                 metadata["token_usage"]["input_tokens_details"] = {
                     "text_tokens": details.text_tokens,
                     "image_tokens": details.image_tokens

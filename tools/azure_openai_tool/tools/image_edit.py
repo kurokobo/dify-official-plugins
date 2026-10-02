@@ -150,18 +150,20 @@ class ImageEditTool(Tool):
                     metadata = {"mime_type": mime_type}
 
                     # Add usage information if available
-                    if hasattr(response, "usage"):
+                    usage = getattr(response, "usage", None)
+                    if usage is not None:
                         usage_dict = {}
-                        if hasattr(response.usage, "total_tokens"):
-                            usage_dict["total_tokens"] = response.usage.total_tokens
-                        if hasattr(response.usage, "input_tokens"):
-                            usage_dict["input_tokens"] = response.usage.input_tokens
-                        if hasattr(response.usage, "output_tokens"):
-                            usage_dict["output_tokens"] = response.usage.output_tokens
-                        if hasattr(response.usage, "input_tokens_details"):
+                        if hasattr(usage, "total_tokens"):
+                            usage_dict["total_tokens"] = usage.total_tokens
+                        if hasattr(usage, "input_tokens"):
+                            usage_dict["input_tokens"] = usage.input_tokens
+                        if hasattr(usage, "output_tokens"):
+                            usage_dict["output_tokens"] = usage.output_tokens
+                        details = getattr(usage, "input_tokens_details", None)
+                        if details is not None:
                             usage_dict["input_tokens_details"] = {
-                                "text_tokens": response.usage.input_tokens_details.text_tokens,
-                                "image_tokens": response.usage.input_tokens_details.image_tokens,
+                                "text_tokens": details.text_tokens,
+                                "image_tokens": details.image_tokens,
                             }
                         if usage_dict:
                             metadata["usage"] = usage_dict

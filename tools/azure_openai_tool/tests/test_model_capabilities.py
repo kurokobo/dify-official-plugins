@@ -1,11 +1,16 @@
+import base64
+import struct
 import sys
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
 import yaml
 from dify_plugin.entities.tool import ToolConfiguration, ToolInvokeMessage, ToolProviderConfiguration
+from openai import AzureOpenAI, OpenAI
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_ROOT))
@@ -98,6 +103,8 @@ def image_tool(request, monkeypatch):
     tool = SimpleNamespace(
         runtime=SimpleNamespace(credentials=credentials),
         create_text_message=lambda text: text,
+        create_blob_message=lambda blob, meta: {"blob": blob, "meta": meta},
+        _decode_image=tool_class._decode_image,
     )
     parameters = {"prompt": "A test image"}
     if request.param == "edit":
@@ -206,11 +213,69 @@ def test_tool_options_offer_common_image_parameters(tool_name):
     assert parameters["size"].default == "1024x1024"
 
 
+@pytest.fixture
+def encoded_png():
+    return (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/"
+        "x8AAwMCAO+ip1sAAAAASUVORK5CYII="
+    )
 
 
+def test_png_fixture_is_valid(encoded_png):
+    data = base64.b64decode(encoded_png)
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    chunks = {}
+    offset = 8
+    while offset < len(data):
+        length = int.from_bytes(data[offset:offset + 4], "big")
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + length]
+        crc = int.from_bytes(data[offset + 8 + length:offset + 12 + length], "big")
+        assert zlib.crc32(kind + payload) == crc
+        chunks[kind] = payload
+        offset += length + 12
+    assert offset == len(data)
+    assert list(chunks) == [b"IHDR", b"IDAT", b"IEND"]
+    assert struct.unpack(">IIBBBBB", chunks[b"IHDR"]) == (1, 1, 8, 4, 0, 0, 0)
+    assert zlib.decompress(chunks[b"IDAT"]) == b"\x01\xff\xff"
 
 
+@pytest.mark.parametrize("usage_state", ["absent", "null", "details_absent", "details_null", "complete"])
+def test_tools_return_image_with_optional_usage(image_tool, usage_state, encoded_png):
+    tool_class, tool, parameters, api_call = image_tool
+    payload = {"created": 0, "data": [{"b64_json": encoded_png}]}
+    expected_usage = {"total_tokens": 30, "input_tokens": 10, "output_tokens": 20}
+    if usage_state == "null":
+        payload["usage"] = None
+    elif usage_state in {"details_absent", "details_null", "complete"}:
+        payload["usage"] = dict(expected_usage)
+        if usage_state == "details_null":
+            payload["usage"]["input_tokens_details"] = None
+        elif usage_state == "complete":
+            details = {"text_tokens": 4, "image_tokens": 6}
+            payload["usage"]["input_tokens_details"] = details
+            expected_usage["input_tokens_details"] = details
 
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    with AzureOpenAI(
+        api_key="test-key",
+        azure_endpoint="https://example.openai.azure.com/",
+        api_version="2025-04-01-preview",
+        azure_deployment="test-deployment",
+        http_client=httpx.Client(transport=transport),
+    ) as client:
+        api_call.return_value = client.images.generate(model="test-deployment", prompt="test")
+
+    messages = list(tool_class._invoke(tool, parameters))
+    api_call.assert_called_once()
+    assert len(messages) == 1
+    assert messages[0]["blob"] == base64.b64decode(encoded_png)
+    assert messages[0]["meta"]["mime_type"] == "image/png"
+    usage_key = "token_usage" if tool_class.__name__ == "ImageGenerateTool" else "usage"
+    if usage_state in {"absent", "null"}:
+        assert usage_key not in messages[0]["meta"]
+    else:
+        assert messages[0]["meta"][usage_key] == expected_usage
 
 
 
