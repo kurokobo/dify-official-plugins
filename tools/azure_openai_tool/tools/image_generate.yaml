@@ -35,9 +35,9 @@ parameters:
   - default: "1024x1024"
     form: form
     human_description:
-      en_US: Select the image size
-      pt_BR: Selecione o tamanho da imagem
-      zh_Hans: 选择图像大小
+      en_US: Select the image size. Some options may not be supported by the selected model.
+      pt_BR: Selecione o tamanho da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
+      zh_Hans: 选择图像大小。所选模型可能不支持某些选项。
     label:
       en_US: Image size
       pt_BR: Tamanho da imagem
@@ -60,6 +60,11 @@ parameters:
           zh_Hans: 横屏/风景 (1536x1024)
         value: "1536x1024"
       - label:
+          en_US: Auto
+          pt_BR: Automático
+          zh_Hans: 自动
+        value: auto
+      - label:
           en_US: Custom
           pt_BR: Personalizado
           zh_Hans: 自定义
@@ -68,9 +73,9 @@ parameters:
     type: select
   - form: form
     human_description:
-      en_US: Optional custom output size for GPT-image-2 style deployments. Use a WxH string such as 1024x1024. This field is used only when Image size is set to Custom.
-      pt_BR: Tamanho de saída personalizado opcional para implantações no estilo GPT-image-2. Use um texto no formato WxH, como 1024x1024. Este campo só é usado quando o Tamanho da imagem está definido como Personalizado.
-      zh_Hans: 面向 GPT-image-2 类部署的可选自定义输出尺寸。请使用 WxH 字符串，例如 1024x1024。仅当上方图像大小设置为“自定义”时才会使用此字段。
+      en_US: Optional custom output size as a WxH string, such as 1024x1024. Used only when Image size is set to Custom. Support and size limits vary by model.
+      pt_BR: Tamanho de saída personalizado opcional no formato WxH, como 1024x1024. Usado apenas quando o Tamanho da imagem está definido como Personalizado. O suporte e os limites de tamanho variam conforme o modelo.
+      zh_Hans: 可选自定义输出尺寸，格式为 WxH，例如 1024x1024。仅当图像大小设置为“自定义”时使用。支持情况和尺寸限制因模型而异。
     label:
       en_US: Custom Size
       pt_BR: Tamanho personalizado
@@ -96,15 +101,20 @@ parameters:
   - default: high
     form: form
     human_description:
-      en_US: Select the image quality
-      pt_BR: Selecione a qualidade da imagem
-      zh_Hans: 选择图像质量
+      en_US: Select the image quality. Some options may not be supported by the selected model.
+      pt_BR: Selecione a qualidade da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
+      zh_Hans: 选择图像质量。所选模型可能不支持某些选项。
     label:
       en_US: Image quality
       pt_BR: Qualidade da imagem
       zh_Hans: 图像质量
     name: quality
     options:
+      - label:
+          en_US: Auto
+          pt_BR: Automático
+          zh_Hans: 自动
+        value: auto
       - label:
           en_US: Low
           pt_BR: Baixa
@@ -120,6 +130,16 @@ parameters:
           pt_BR: Alta
           zh_Hans: 高
         value: high
+      - label:
+          en_US: XHigh
+          pt_BR: XHigh
+          zh_Hans: XHigh
+        value: xhigh
+      - label:
+          en_US: Max
+          pt_BR: Max
+          zh_Hans: Max
+        value: max
     required: false
     type: select
   - default: png

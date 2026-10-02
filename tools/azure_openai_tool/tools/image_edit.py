@@ -1,6 +1,5 @@
 import base64
 import io
-import re
 from collections.abc import Generator
 from typing import Any
 
@@ -9,10 +8,12 @@ from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.file.file import File
 from openai import AzureOpenAI
 
+from utils.model_capabilities import validate_image_parameters
+
 
 class ImageEditTool(Tool):
     """
-    Tool to edit images using OpenAI's gpt-image-1 model.
+    Tool to edit images using Azure OpenAI's GPT-image models.
     It takes an input image and a prompt, and optionally a mask,
     to generate an edited version of the image.
     """
@@ -43,6 +44,11 @@ class ImageEditTool(Tool):
         edit_args: dict[str, Any] = {
             "prompt": prompt,
         }
+        try:
+            edit_args.update(validate_image_parameters(tool_parameters))
+        except ValueError as error:
+            yield self.create_text_message(str(error))
+            return
 
         # Handle single image or array of images
         if isinstance(image, list):
@@ -89,29 +95,6 @@ class ImageEditTool(Tool):
                 yield self.create_text_message(f"Warning: Could not process mask image: {e}. Proceeding without mask.")
                 if "mask" in edit_args:
                     del edit_args["mask"]
-
-        # Size (optional, defaults to 1024x1024)
-        size = tool_parameters.get("size", "1024x1024")
-        if size == "custom":
-            custom_size = tool_parameters.get("custom_size")
-            if not isinstance(custom_size, str) or not ImageEditTool._is_size_string(custom_size):
-                yield self.create_text_message(
-                    "Invalid custom_size. When size is custom, provide a WxH string such as 1024x1024 or 1536x1024."
-                )
-                return
-            edit_args["size"] = custom_size
-        else:
-            if size not in {"1024x1024", "1536x1024", "1024x1536"}:
-                yield self.create_text_message("Invalid size. Choose 1024x1024, 1536x1024, 1024x1536, or custom.")
-                return
-            edit_args["size"] = size
-
-        # Quality (optional, defaults to auto)
-        quality = tool_parameters.get("quality", "high")
-        if quality not in {"low", "medium", "high"}:
-            yield self.create_text_message("Invalid quality. Choose low, medium or high.")
-            return
-        edit_args["quality"] = quality
 
         # Number of images to generate (optional, defaults to 1)
         n = tool_parameters.get("n", 1)
@@ -217,7 +200,3 @@ class ImageEditTool(Tool):
         except Exception:
             # Fallback for potentially malformed strings
             return "image/png", base64.b64decode(encoded_str.split(',')[-1])  # Try decoding last part
-
-    @staticmethod
-    def _is_size_string(size: str) -> bool:
-        return bool(re.fullmatch(r"\d+x\d+", size))
