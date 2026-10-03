@@ -5,8 +5,9 @@ from typing import Any, Dict
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
-from openai import AzureOpenAI
 
+from utils.azure_client import create_image_client, is_v1_api_base
+from utils.image_output import get_image_mime_type, validate_output_parameters
 from utils.model_capabilities import validate_image_parameters
 
 
@@ -17,12 +18,12 @@ class ImageGenerateTool(Tool):
         """
         invoke tools
         """
-        client = AzureOpenAI(
-            api_key=self.runtime.credentials["azure_openai_api_key"],
-            azure_endpoint=self.runtime.credentials["azure_openai_base_url"],
-            api_version=self.runtime.credentials["azure_openai_api_version"],
-            azure_deployment=self.runtime.credentials["azure_openai_api_model_name"]
-        )
+        use_v1 = is_v1_api_base(self.runtime.credentials["azure_openai_base_url"])
+        try:
+            client = create_image_client(self.runtime.credentials)
+        except ValueError as error:
+            yield self.create_text_message(str(error))
+            return
 
         prompt = tool_parameters.get("prompt", "")
         if not prompt:
@@ -32,22 +33,15 @@ class ImageGenerateTool(Tool):
         generation_args: Dict[str, Any] = {
             "prompt": prompt,
         }
+        if use_v1:
+            generation_args["model"] = self.runtime.credentials["azure_openai_api_model_name"]
 
         try:
             generation_args.update(validate_image_parameters(tool_parameters))
+            generation_args.update(validate_output_parameters(tool_parameters, use_v1=use_v1))
         except ValueError as error:
             yield self.create_text_message(str(error))
             return
-
-        # Output Format (optional, defaults to png implicitly via API? Let's allow setting explicitly)
-        output_format = tool_parameters.get("output_format", "png")  # Treat 'auto' as unset/use API default
-        if output_format not in {"png", "jpeg"}:
-            yield self.create_text_message("Invalid output_format. Choose png or jpeg.")
-            return
-
-        # Output Compression (optional, defaults to 100)
-        output_compression = tool_parameters.get("output_compression", 100)
-        generation_args["output_compression"] = output_compression
 
         # N (optional, defaults to 1)
         n_str = tool_parameters.get("n")
@@ -92,12 +86,7 @@ class ImageGenerateTool(Tool):
             if not image.b64_json:
                 continue
             (mime_type, blob_image) = ImageGenerateTool._decode_image(image.b64_json)
-            # Determine actual mime_type based on requested format if possible
-            final_mime_type = mime_type
-            if output_format in {'png', 'jpeg', 'webp'}:
-                final_mime_type = f"image/{output_format}"
-
-            metadata["mime_type"] = final_mime_type
+            metadata["mime_type"] = get_image_mime_type(blob_image, mime_type)
             yield self.create_blob_message(blob=blob_image, meta=metadata)
 
     @staticmethod
@@ -110,7 +99,6 @@ class ImageGenerateTool(Tool):
         :return: A tuple containing the MIME type and the decoded image bytes
         """
         if ImageGenerateTool._is_plain_base64(base64_image):
-            # Default assumption, might be overridden later based on output_format
             return "image/png", base64.b64decode(base64_image)
         else:
             return ImageGenerateTool._extract_mime_and_data(base64_image)

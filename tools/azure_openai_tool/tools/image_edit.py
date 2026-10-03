@@ -6,8 +6,9 @@ from typing import Any
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 from dify_plugin.file.file import File
-from openai import AzureOpenAI
 
+from utils.azure_client import create_image_client, is_v1_api_base
+from utils.image_output import get_image_mime_type, validate_output_parameters
 from utils.model_capabilities import validate_image_parameters
 
 
@@ -24,12 +25,12 @@ class ImageEditTool(Tool):
         """
         Invoke the image editing tool.
         """
-        client = AzureOpenAI(
-            api_key=self.runtime.credentials["azure_openai_api_key"],
-            azure_endpoint=self.runtime.credentials["azure_openai_base_url"],
-            api_version=self.runtime.credentials["azure_openai_api_version"],
-            azure_deployment=self.runtime.credentials["azure_openai_api_model_name"]
-        )
+        use_v1 = is_v1_api_base(self.runtime.credentials["azure_openai_base_url"])
+        try:
+            client = create_image_client(self.runtime.credentials)
+        except ValueError as error:
+            yield self.create_text_message(str(error))
+            return
 
         # --- Parameter Extraction and Validation ---
         prompt = tool_parameters.get("prompt")
@@ -44,8 +45,11 @@ class ImageEditTool(Tool):
         edit_args: dict[str, Any] = {
             "prompt": prompt,
         }
+        if use_v1:
+            edit_args["model"] = self.runtime.credentials["azure_openai_api_model_name"]
         try:
             edit_args.update(validate_image_parameters(tool_parameters))
+            edit_args.update(validate_output_parameters(tool_parameters, use_v1=use_v1, is_edit=True))
         except ValueError as error:
             yield self.create_text_message(str(error))
             return
@@ -140,14 +144,11 @@ class ImageEditTool(Tool):
                 if not image_data.b64_json:
                     continue
 
-                # For edits, the output format isn't configurable via API for gpt-image-1,
-                # it seems to follow input or defaults (likely PNG).
-                # Let's assume PNG or decode if possible.
                 try:
                     mime_type, blob_image = self._decode_image(image_data.b64_json)
 
                     # Create metadata dictionary
-                    metadata = {"mime_type": mime_type}
+                    metadata = {"mime_type": get_image_mime_type(blob_image, mime_type)}
 
                     # Add usage information if available
                     usage = getattr(response, "usage", None)

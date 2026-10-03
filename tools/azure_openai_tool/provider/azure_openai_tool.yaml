@@ -52,24 +52,24 @@ credentials_for_provider:
       zh_Hans: API 基础 URL
       pt_BR: URL Base da API
     help:
-      en_US: Please input your Azure OpenAI Base URL, e.g. https://********.openai.azure.com/
-      zh_Hans: 请输入你的 Azure OpenAI API基础 URL，例如：https://********.openai.azure.com/
-      pt_BR: Introduza a URL Base do Azure OpenAI, e.g. https://********.openai.azure.com/
+      en_US: Use your Azure resource URL for dated APIs, or https://********.openai.azure.com/openai/v1/ for the v1 Images API (preview). Existing dated endpoints retain their request behavior.
+      zh_Hans: 日期版本 API 使用 Azure 资源 URL；v1 图像 API（预览版）使用 https://********.openai.azure.com/openai/v1/。现有日期版本端点保留原有请求行为。
+      pt_BR: Use a URL do recurso Azure para APIs com versão por data, ou https://********.openai.azure.com/openai/v1/ para a API de imagens v1 (prévia). Os endpoints existentes mantêm o comportamento das solicitações.
     placeholder:
       en_US: Please input your Azure OpenAI Base URL, e.g. https://********.openai.azure.com/
       zh_Hans: 请输入你的 Azure OpenAI API基础 URL，例如：https://********.openai.azure.com/
       pt_BR: Introduza a URL Base do Azure OpenAI, e.g. https://********.openai.azure.com/
   azure_openai_api_version:
     type: text-input
-    required: true
+    required: false
     label:
       en_US: API Version
       zh_Hans: API 版本
       pt_BR: API Version
     help:
-      en_US: Please input your Azure OpenAI API version. Use 2025-04-01-preview or later for current GPT-image edit support.
-      zh_Hans: 请输入你的 Azure OpenAI API 版本。若要使用当前的 GPT-image 编辑能力，请使用 2025-04-01-preview 或更高版本。
-      pt_BR: Insira a versão da API do Azure OpenAI. Use 2025-04-01-preview ou superior para o suporte atual de edição com GPT-image.
+      en_US: Required for dated endpoints. Leave empty for /openai/v1 endpoints; the plugin uses api-version=preview there and ignores this field. An empty version does not switch a dated endpoint to v1.
+      zh_Hans: 日期版本端点必须填写。/openai/v1 端点可留空；插件使用 api-version=preview 并忽略此字段。版本留空不会将日期版本端点切换为 v1。
+      pt_BR: Obrigatória para endpoints com versão por data. Deixe vazio para /openai/v1; o plugin usa api-version=preview e ignora este campo. Uma versão vazia não altera um endpoint existente para v1.
     placeholder:
       en_US: 2025-04-01-preview
       zh_Hans: 2025-04-01-preview

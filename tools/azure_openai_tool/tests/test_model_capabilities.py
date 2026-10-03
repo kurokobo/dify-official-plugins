@@ -1,7 +1,10 @@
 import base64
+import json
 import struct
 import sys
 import zlib
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -22,10 +25,71 @@ from utils.model_capabilities import validate_image_parameters
 
 
 
+@pytest.mark.parametrize("api_version", [None, "", "2025-04-01-preview"])
+@pytest.mark.parametrize("suffix", ["/openai/v1", "/openai/v1/", "/gateway/openai/v1/"])
+def test_create_image_client_uses_v1_endpoint(monkeypatch, api_version, suffix):
+    from utils import azure_client
+
+    v1_client = Mock()
+    dated_client = Mock()
+    monkeypatch.setattr(azure_client, "OpenAI", v1_client)
+    monkeypatch.setattr(azure_client, "AzureOpenAI", dated_client)
+    credentials = {
+        "azure_openai_api_key": "test-key",
+        "azure_openai_base_url": "https://example.openai.azure.com" + suffix,
+        "azure_openai_api_model_name": "arbitrary-deployment",
+    }
+    if api_version is not None:
+        credentials["azure_openai_api_version"] = api_version
+
+    assert azure_client.create_image_client(credentials) is v1_client.return_value
+    v1_client.assert_called_once_with(
+        api_key="test-key", base_url=credentials["azure_openai_base_url"].rstrip("/") + "/",
+        default_query={"api-version": "preview"},
+    )
+    dated_client.assert_not_called()
 
 
+@pytest.mark.parametrize("api_version", ["2024-02-15-preview", "2025-04-01-preview", "2025-04-01"])
+def test_create_image_client_preserves_dated_credentials(monkeypatch, api_version):
+    from utils import azure_client
+
+    v1_client = Mock()
+    dated_client = Mock()
+    monkeypatch.setattr(azure_client, "OpenAI", v1_client)
+    monkeypatch.setattr(azure_client, "AzureOpenAI", dated_client)
+    credentials = {
+        "azure_openai_api_key": "test-key",
+        "azure_openai_base_url": "https://example.openai.azure.com/",
+        "azure_openai_api_model_name": "arbitrary-deployment",
+        "azure_openai_api_version": api_version,
+    }
+
+    assert azure_client.create_image_client(credentials) is dated_client.return_value
+    dated_client.assert_called_once_with(
+        api_key="test-key", azure_endpoint=credentials["azure_openai_base_url"],
+        api_version=api_version, azure_deployment="arbitrary-deployment",
+    )
+    v1_client.assert_not_called()
 
 
+@pytest.mark.parametrize("api_version", [None, "", " "])
+def test_create_image_client_does_not_switch_to_v1_on_empty_version(monkeypatch, api_version):
+    from utils import azure_client
+
+    v1_client = Mock()
+    monkeypatch.setattr(azure_client, "OpenAI", v1_client)
+    credentials = {
+        "azure_openai_api_key": "test-key",
+        "azure_openai_base_url": "https://example.openai.azure.com/",
+        "azure_openai_api_model_name": "arbitrary-deployment",
+    }
+    if api_version is not None:
+        credentials["azure_openai_api_version"] = api_version
+
+    with pytest.raises(ValueError, match="API Version is required"):
+        azure_client.create_image_client(credentials)
+    v1_client.assert_not_called()
 
 
 def test_provider_requires_no_model_profile(monkeypatch):
@@ -39,7 +103,7 @@ def test_provider_requires_no_model_profile(monkeypatch):
         "azure_openai_base_url", "azure_openai_api_version",
     }
     api_version = next(item for item in provider.credentials_schema if item.name == "azure_openai_api_version")
-    assert api_version.required is True
+    assert api_version.required is False
     assert api_version.default is None
 
 
@@ -88,12 +152,14 @@ def test_custom_size_constraints_are_left_to_api(size):
 @pytest.fixture(params=["generate", "edit"])
 def image_tool(request, monkeypatch):
     from tools import image_edit, image_generate
+    from utils import azure_client
 
     module = image_generate if request.param == "generate" else image_edit
     tool_class = module.ImageGenerateTool if request.param == "generate" else module.ImageEditTool
     api_call = Mock(return_value=SimpleNamespace(data=[]))
     client = SimpleNamespace(images=SimpleNamespace(**{request.param: api_call}))
-    monkeypatch.setattr(module, "AzureOpenAI", Mock(return_value=client))
+    monkeypatch.setattr(azure_client, "AzureOpenAI", Mock(return_value=client))
+    monkeypatch.setattr(azure_client, "OpenAI", Mock(return_value=client))
     credentials = {
         "azure_openai_api_key": "test-key",
         "azure_openai_base_url": "https://example.openai.azure.com/",
@@ -118,14 +184,43 @@ def image_tool(request, monkeypatch):
     return tool_class, tool, parameters, api_call
 
 
+@pytest.fixture
+def v1_image_tool(image_tool):
+    image_tool[1].runtime.credentials["azure_openai_base_url"] = "https://example.openai.azure.com/openai/v1/"
+    image_tool[1].runtime.credentials.pop("azure_openai_api_version")
+    return image_tool
 
 
 
 
 
 
+@pytest.mark.parametrize("api_version", ["2024-02-15-preview", "2025-04-01-preview", "2025-04-01"])
+@pytest.mark.parametrize("output_parameters", [{}, {"output_format": "jpeg", "output_compression": 50}, {"output_format": "png", "output_compression": -1}])
+def test_tools_preserve_dated_request_parameters(image_tool, api_version, output_parameters):
+    tool_class, tool, parameters, api_call = image_tool
+    tool.runtime.credentials["azure_openai_api_version"] = api_version
+
+    assert list(tool_class._invoke(tool, {**parameters, **output_parameters})) == []
+    expected = {"prompt": parameters["prompt"], "size": "1024x1024", "quality": "high", "n": 1}
+    if "image" in parameters:
+        expected["image"] = api_call.call_args.kwargs["image"]
+    else:
+        expected["output_compression"] = output_parameters.get("output_compression", 100)
+    api_call.assert_called_once_with(**expected)
 
 
+@pytest.mark.parametrize("api_version", [None, "", " "])
+def test_tools_report_missing_dated_api_version(image_tool, api_version):
+    tool_class, tool, parameters, api_call = image_tool
+    if api_version is None:
+        tool.runtime.credentials.pop("azure_openai_api_version")
+    else:
+        tool.runtime.credentials["azure_openai_api_version"] = api_version
+    messages = list(tool_class._invoke(tool, parameters))
+    assert len(messages) == 1
+    assert "API Version is required" in messages[0]
+    api_call.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -141,7 +236,7 @@ def image_tool(request, monkeypatch):
         ({"size": "custom", "custom_size": "1025x1024"}, "1025x1024", "high"),
     ],
 )
-@pytest.mark.parametrize("use_v1", [False])
+@pytest.mark.parametrize("use_v1", [False, True])
 def test_tools_send_common_image_parameters(image_tool, parameters, expected_size, expected_quality, use_v1):
     tool_class, tool, defaults, api_call = image_tool
     if use_v1:
@@ -184,7 +279,7 @@ def test_old_profile_credentials_do_not_restrict_image_parameters(image_tool, pr
     assert api_call.call_args.kwargs["quality"] == "max"
 
 
-@pytest.mark.parametrize("use_v1", [False])
+@pytest.mark.parametrize("use_v1", [False, True])
 def test_tools_report_api_parameter_rejection(image_tool, use_v1):
     tool_class, tool, parameters, api_call = image_tool
     if use_v1:
@@ -278,6 +373,51 @@ def test_tools_return_image_with_optional_usage(image_tool, usage_state, encoded
         assert messages[0]["meta"][usage_key] == expected_usage
 
 
+@pytest.mark.parametrize(
+    ("output_parameters", "expected_format", "expected_compression"),
+    [
+        ({}, "png", None),
+        ({"output_format": "png", "output_compression": 50}, "png", None),
+        ({"output_format": "png", "output_compression": -1}, "png", None),
+        ({"output_format": "jpeg"}, "jpeg", 100),
+        ({"output_format": "jpeg", "output_compression": 0}, "jpeg", 0),
+        ({"output_format": "jpeg", "output_compression": 50.0}, "jpeg", 50),
+        ({"output_format": "jpeg", "output_compression": 100}, "jpeg", 100),
+    ],
+)
+def test_tools_send_output_parameters(v1_image_tool, output_parameters, expected_format, expected_compression):
+    tool_class, tool, parameters, api_call = v1_image_tool
+    assert list(tool_class._invoke(tool, {**parameters, **output_parameters})) == []
+    api_call.assert_called_once()
+    arguments = api_call.call_args.kwargs
+    assert arguments["model"] == "arbitrary-deployment"
+    assert arguments["output_format"] == expected_format
+    if expected_compression is None:
+        assert "output_compression" not in arguments
+    else:
+        assert arguments["output_compression"] == expected_compression
+        assert type(arguments["output_compression"]) is int
+
+
+@pytest.mark.parametrize(
+    ("output_parameters", "error"),
+    [
+        ({"output_format": "webp"}, "Invalid output_format"),
+        ({"output_format": "gif"}, "Invalid output_format"),
+        ({"output_format": None}, "Invalid output_format"),
+        ({"output_format": []}, "Invalid output_format"),
+        *[
+            ({"output_format": "jpeg", "output_compression": compression}, "Invalid output_compression")
+            for compression in [-1, 101, 50.5, "50", None, True, float("nan"), float("inf")]
+        ],
+    ],
+)
+def test_tools_reject_invalid_output_parameters(v1_image_tool, output_parameters, error):
+    tool_class, tool, parameters, api_call = v1_image_tool
+    messages = list(tool_class._invoke(tool, {**parameters, **output_parameters}))
+    assert len(messages) == 1
+    assert error in messages[0]
+    api_call.assert_not_called()
 
 
 
@@ -288,10 +428,94 @@ def test_tools_return_image_with_optional_usage(image_tool, usage_state, encoded
 
 
 
+@pytest.mark.parametrize("prefix", ["", "data:image/png;base64,", "data:image/jpeg;base64,"])
+def test_tools_preserve_actual_png_mime_when_jpeg_requested(image_tool, encoded_png, prefix):
+    tool_class, tool, parameters, api_call = image_tool
+    api_call.return_value = SimpleNamespace(data=[SimpleNamespace(b64_json=prefix + encoded_png)])
+    messages = list(tool_class._invoke(tool, {**parameters, "output_format": "jpeg"}))
+    assert len(messages) == 1
+    assert messages[0]["blob"] == base64.b64decode(encoded_png)
+    assert messages[0]["meta"]["mime_type"] == "image/png"
 
 
+@pytest.fixture
+def encoded_jpeg():
+    return (
+        "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8U"
+        "HRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/"
+        "8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af3//2Q=="
+    )
 
 
+@pytest.mark.parametrize("prefix", ["", "data:image/jpeg;base64,", "data:image/png;base64,"])
+def test_tools_return_jpeg_with_correct_mime(image_tool, encoded_jpeg, prefix):
+    tool_class, tool, parameters, api_call = image_tool
+    api_call.return_value = SimpleNamespace(data=[SimpleNamespace(b64_json=prefix + encoded_jpeg)])
+    messages = list(tool_class._invoke(tool, {**parameters, "output_format": "jpeg"}))
+    assert len(messages) == 1
+    assert messages[0]["blob"] == base64.b64decode(encoded_jpeg)
+    assert messages[0]["meta"]["mime_type"] == "image/jpeg"
 
 
+@pytest.mark.parametrize("output_format", ["png", "jpeg"])
+@pytest.mark.parametrize("use_v1", [False, True])
+def test_tools_serialize_output_parameters_with_sdk(
+    image_tool, encoded_png, encoded_jpeg, output_format, use_v1, monkeypatch
+):
+    from utils import azure_client
 
+    tool_class, tool, parameters, _ = image_tool
+    if use_v1:
+        tool.runtime.credentials["azure_openai_base_url"] = "https://example.openai.azure.com/openai/v1/"
+        tool.runtime.credentials.pop("azure_openai_api_version")
+    encoded_image = encoded_png if output_format == "png" else encoded_jpeg
+    sent_arguments = {}
+    request_urls = []
+
+    def handle_request(request):
+        request_urls.append(request.url)
+        if use_v1:
+            assert request.headers["authorization"] == "Bearer test-key"
+        else:
+            assert request.headers["api-key"] == "test-key"
+        content_type = request.headers["content-type"]
+        if content_type.startswith("application/json"):
+            sent_arguments.update(json.loads(request.content))
+        else:
+            headers = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode()
+            multipart = BytesParser(policy=policy.default).parsebytes(headers + request.content)
+            for part in multipart.iter_parts():
+                if part.get_filename() is None:
+                    name = part.get_param("name", header="content-disposition")
+                    sent_arguments[name] = part.get_payload(decode=True).decode()
+        return httpx.Response(200, json={"created": 0, "data": [{"b64_json": encoded_image}], "usage": None})
+
+    if "image" in parameters:
+        parameters["image"].blob = base64.b64decode(encoded_png)
+    transport = httpx.MockTransport(handle_request)
+    with httpx.Client(transport=transport) as http_client:
+        monkeypatch.setattr(azure_client, "AzureOpenAI", lambda **kwargs: AzureOpenAI(http_client=http_client, **kwargs))
+        monkeypatch.setattr(azure_client, "OpenAI", lambda **kwargs: OpenAI(http_client=http_client, **kwargs))
+        messages = list(tool_class._invoke(tool, {
+            **parameters, "output_format": output_format, "output_compression": 50,
+        }))
+
+    assert len(request_urls) == 1
+    expected_action = "edits" if "image" in parameters else "generations"
+    if use_v1:
+        assert request_urls[0].path == f"/openai/v1/images/{expected_action}"
+        assert dict(request_urls[0].params) == {"api-version": "preview"}
+        assert sent_arguments["model"] == "arbitrary-deployment"
+        assert sent_arguments["output_format"] == output_format
+    else:
+        assert request_urls[0].path == f"/openai/deployments/arbitrary-deployment/images/{expected_action}"
+        assert request_urls[0].params["api-version"] == "2025-04-01-preview"
+        assert "model" not in sent_arguments
+        assert "output_format" not in sent_arguments
+    if (use_v1 and output_format == "jpeg") or (not use_v1 and expected_action == "generations"):
+        assert int(sent_arguments["output_compression"]) == 50
+    else:
+        assert "output_compression" not in sent_arguments
+    assert len(messages) == 1
+    assert messages[0]["blob"] == base64.b64decode(encoded_image)
+    assert messages[0]["meta"]["mime_type"] == f"image/{output_format}"
