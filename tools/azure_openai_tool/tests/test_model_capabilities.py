@@ -13,6 +13,7 @@ import httpx
 import pytest
 import yaml
 from dify_plugin.entities.tool import ToolConfiguration, ToolInvokeMessage, ToolProviderConfiguration
+from dify_plugin.errors.tool import ToolProviderCredentialValidationError
 from openai import AzureOpenAI, OpenAI
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -21,8 +22,70 @@ sys.path.insert(0, str(PLUGIN_ROOT))
 from utils.model_capabilities import validate_image_parameters
 
 
+@pytest.mark.parametrize(
+    "messages, succeeds",
+    [
+        (["image"], True),
+        (["text", "image"], True),
+        (["text", "text"], False),
+        ([], False),
+        (["empty_image"], False),
+        (["non_image"], False),
+        (["missing_mime"], False),
+    ],
+)
+def test_provider_validates_generated_image(monkeypatch, messages, succeeds):
+    from provider import azure_openai_tool
+
+    def blob_message(blob=b"image", mime_type="image/png"):
+        return ToolInvokeMessage(
+            type=ToolInvokeMessage.MessageType.BLOB,
+            message=ToolInvokeMessage.BlobMessage(blob=blob),
+            meta={"mime_type": mime_type} if mime_type is not None else None,
+        )
+
+    available_messages = {
+        "image": blob_message(),
+        "text": ToolInvokeMessage(
+            type=ToolInvokeMessage.MessageType.TEXT,
+            message=ToolInvokeMessage.TextMessage(text="Test tool response"),
+        ),
+        "empty_image": blob_message(blob=b""),
+        "non_image": blob_message(blob=b"test document", mime_type="application/pdf"),
+        "missing_mime": blob_message(mime_type=None),
+    }
+    tool = Mock()
+    tool.invoke.return_value = iter(available_messages[name] for name in messages)
+    factory = Mock(return_value=tool)
+    monkeypatch.setattr(azure_openai_tool.ImageGenerateTool, "from_credentials", factory)
+    credentials = {"azure_openai_api_key": "test-key"}
+
+    if succeeds:
+        azure_openai_tool.AzureOpenAIProvider._validate_credentials(SimpleNamespace(), credentials)
+    else:
+        with pytest.raises(ToolProviderCredentialValidationError, match="no image was returned") as error:
+            azure_openai_tool.AzureOpenAIProvider._validate_credentials(SimpleNamespace(), credentials)
+        assert isinstance(error.value.__cause__, ValueError)
+        if "text" in messages:
+            assert "Tool response: Test tool response\nTest tool response" in str(error.value)
+
+    factory.assert_called_once_with(credentials, user_id="")
+    tool.invoke.assert_called_once_with(
+        tool_parameters={"prompt": "A plain white square.", "size": "1024x1024", "quality": "low", "n": 1}
+    )
 
 
+def test_provider_preserves_generation_exception(monkeypatch):
+    from provider import azure_openai_tool
+
+    tool = Mock()
+    original_error = RuntimeError("Test generation failure")
+    tool.invoke.side_effect = original_error
+    monkeypatch.setattr(azure_openai_tool.ImageGenerateTool, "from_credentials", Mock(return_value=tool))
+
+    with pytest.raises(ToolProviderCredentialValidationError, match="Test generation failure") as error:
+        azure_openai_tool.AzureOpenAIProvider._validate_credentials(SimpleNamespace(), {})
+    assert error.value.__cause__ is original_error
 
 
 @pytest.mark.parametrize("api_version", [None, "", "2025-04-01-preview"])
