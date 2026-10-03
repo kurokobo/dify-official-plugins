@@ -2,7 +2,7 @@
 
 ## 概述
 
-Azure OpenAI 提供了 GPT-image 系列模型，可根据文本和图像输入生成或编辑图像。该插件支持基于当前 GPT-image 部署的 Azure OpenAI 图像生成与编辑工作流，包括最新的 `gpt-image-2` 部署。对于支持更多输出分辨率的部署，你可以继续使用现有图像工具，在尺寸下拉框中选择“自定义”，然后通过可选的 `custom_size` 参数指定自定义尺寸。本文档说明如何在 Dify 中配置并使用这些 Azure OpenAI 图像工具。
+本插件使用 Azure OpenAI Images API，通过 GPT-image 部署生成和编辑图像。插件支持日期版本端点和明确配置的 v1 端点，不使用 Responses API 的图像生成工具。
 
 ## 配置
 
@@ -12,8 +12,8 @@ Azure OpenAI 提供了 GPT-image 系列模型，可根据文本和图像输入�
 
 除了 API Key 之外，你还需要准备以下信息来配置插件：
 
-- **Deployment Name**：Azure OpenAI GPT-image 部署名称，例如 `gpt-image-2`。
-- **API Base URL**：Azure OpenAI 资源的基础地址，例如 `https://********.openai.azure.com/`。
+- **Deployment Name**：Azure OpenAI GPT-image 部署的自定义名称，可以与实际模型名称不同。
+- **API Base URL**：日期版本 API 使用 Azure 资源 URL；v1 Images API 使用以 `/openai/v1/` 结尾的 URL。
 
 ### 2. 从插件市场安装 Azure OpenAI 图像工具
 
@@ -30,9 +30,30 @@ Azure OpenAI 提供了 GPT-image 系列模型，可根据文本和图像输入�
 | 字段 | 说明 | 示例 |
 | --- | --- | --- |
 | **API Key** | 你的 Azure OpenAI API Key。 | `********************************` |
-| **Deployment Name** | Azure OpenAI GPT-image 系列模型的部署名称。 | `gpt-image-2` |
-| **API Base URL** | Azure OpenAI 资源的基础地址。请仅填写域名级别的 endpoint，**不要**带模型路径或查询参数。 | `https://********.openai.azure.com/` |
-| **API Version** | 要使用的 Azure OpenAI API 版本。若要支持当前 GPT-image 编辑能力，请使用 `2025-04-01-preview` 或更高版本。 | `2025-04-01-preview` |
+| **Deployment Name** | Azure 部署名称，不一定与模型 ID 相同。 | `my-image-deployment` |
+| **API Base URL** | 日期版本 API 使用资源 URL；v1 使用 `/openai/v1/` URL。不要添加部署路径或查询参数。 | `https://********.openai.azure.com/` 或 `https://********.openai.azure.com/openai/v1/` |
+| **API Version** | 日期版本端点必须填写；v1 忽略此字段，可以留空。请确认选定版本支持你的部署及操作。 | 日期版本端点示例：`2025-04-01-preview` |
+
+API 模式由 URL 决定。API Version 留空**不会**将资源 URL 切换到 v1。插件自动为 v1 Images API 使用 `api-version=preview`。如需一致应用输出格式和 JPEG 压缩率设置，请配置 v1 端点。
+
+Deployment Name 决定使用哪个 Azure 部署，无需选择模型或配置档案。
+
+**每次授权检查都会生成测试图像，并可能产生 Azure 费用。**
+
+#### 图像设置
+
+生成和编辑工具均提供以下设置：
+
+| 设置 | 选项 | 默认值 |
+| --- | --- | --- |
+| 质量 | `auto`、`low`、`medium`、`high`、`xhigh`、`max` | `high` |
+| 图像大小 | `1024x1024`、`1536x1024`、`1024x1536`、`auto`、`custom` | `1024x1024` |
+| 自定义尺寸 | `WxH` 格式，仅在图像大小为 `custom` 时使用 | 未设置 |
+| 输出格式 | `png`、`jpeg` | `png` |
+
+请根据 Azure 部署及 API 版本选择支持的设置。例如，`xhigh` 和 `max` 是 GPT Image 2.5 Flare 和 Sunburst 的质量选项，并非所有 GPT-image 模型都支持。模型特定的质量和尺寸限制由 API 验证，不受支持的设置会返回错误。
+
+v1 端点的 JPEG 压缩率可设置为 0 到 100 的整数。
 
 ### 4. 使用工具
 
@@ -40,8 +61,8 @@ Azure OpenAI 提供了 GPT-image 系列模型，可根据文本和图像输入�
 
 #### Chatflow / Workflow 应用
 
-Chatflow 和 Workflow 都支持添加已安装的 Azure OpenAI 图像工具节点，例如 `Azure OpenAI Image Generate` 和 `Azure OpenAI Image Edit`。添加节点后，你需要为必要输入项（如 “Prompt”）填写引用用户输入或前序节点输出的变量。最后，在 “End” 节点或后续节点中引用该工具输出的图像变量即可。如果你的部署支持自定义 GPT-image 尺寸，请先将“图像大小”设置为“自定义”，再填写 `custom_size`，例如 `1024x1024`。
+Chatflow 和 Workflow 都支持添加已安装的 Azure OpenAI 图像工具节点，例如 `Azure OpenAI Image Generate` 和 `Azure OpenAI Image Edit`。添加节点后，为必要输入项（如 Prompt）填写引用用户输入或前序节点输出的变量，并在 End 节点或后续节点中引用图像输出。如需指定自定义尺寸，将“图像大小”设置为“自定义”并填写 `custom_size`，例如部署支持时可使用 `2560x1440`。
 
 #### Agent 应用
 
-在 Agent 应用设置中添加所需的 Azure OpenAI 图像工具。随后，在对话框中输入相应提示词（例如图像生成描述，或图像加编辑指令）来调用对应工具。如果你的 provider 配置指向 `gpt-image-2` 部署，仍然可以继续使用同一套工具；当你需要预设尺寸之外的分辨率时，请先将“图像大小”设置为“自定义”，再填写 `custom_size`。Azure 官方文档将 variation 风格的能力归入图像编辑与 inpainting 工作流中，因此该插件提供的是生成与编辑工具，而不是单独的 variation endpoint 工具。
+在 Agent 应用设置中添加所需工具，然后输入图像生成描述，或图像加编辑指令来调用工具。Azure 文档将 variation 风格的能力归入图像编辑与 inpainting 工作流，因此插件提供生成与编辑工具，而不是单独的 variation 端点。
