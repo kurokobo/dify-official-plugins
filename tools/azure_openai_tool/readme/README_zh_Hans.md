@@ -49,11 +49,12 @@ Deployment Name 决定使用哪个 Azure 部署，无需选择模型或配置档
 | 质量 | `auto`、`low`、`medium`、`high`、`xhigh`、`max` | `high` |
 | 图像大小 | `1024x1024`、`1536x1024`、`1024x1536`、`auto`、`custom` | `1024x1024` |
 | 自定义尺寸 | `WxH` 格式，仅在图像大小为 `custom` 时使用 | 未设置 |
+| 背景 | `auto`、`opaque`、`transparent` | `auto` |
 | 输出格式 | `png`、`jpeg` | `png` |
 
 请根据 Azure 部署及 API 版本选择支持的设置。例如，`xhigh` 和 `max` 是 GPT Image 2.5 Flare 和 Sunburst 的质量选项，并非所有 GPT-image 模型都支持。模型特定的质量和尺寸限制由 API 验证，不受支持的设置会返回错误。
 
-v1 端点的 JPEG 压缩率可设置为 0 到 100 的整数。
+背景 `auto` 保留 API 的默认行为。明确设置的 `opaque` 和 `transparent` 会发送到 v1 和日期版本端点；支持情况取决于部署、API 版本及操作。透明背景要求 PNG 输出。v1 端点的 JPEG 压缩率可设置为 0 到 100 的整数。
 
 ### 4. 使用工具
 

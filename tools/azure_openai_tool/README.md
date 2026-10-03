@@ -49,11 +49,12 @@ Both generation and editing offer the following settings:
 | Quality | `auto`, `low`, `medium`, `high`, `xhigh`, `max` | `high` |
 | Image size | `1024x1024`, `1536x1024`, `1024x1536`, `auto`, `custom` | `1024x1024` |
 | Custom size | A `WxH` string, used when Image size is `custom` | Not set |
+| Background | `auto`, `opaque`, `transparent` | `auto` |
 | Output format | `png`, `jpeg` | `png` |
 
 Choose settings supported by your Azure deployment and API version. For example, `xhigh` and `max` are quality options for GPT Image 2.5 Flare and Sunburst, not for every GPT-image model. The API validates model-specific quality and size limits and returns an error for unsupported settings.
 
-On v1 endpoints, JPEG compression can be set to an integer from 0 to 100.
+Background `auto` leaves the API default unchanged. Explicit `opaque` and `transparent` values are sent on both v1 and dated endpoints; support depends on the deployment, API version, and operation. Transparent backgrounds require PNG output. On v1 endpoints, JPEG compression can be set to an integer from 0 to 100.
 
 ### 4. Use the tools
 

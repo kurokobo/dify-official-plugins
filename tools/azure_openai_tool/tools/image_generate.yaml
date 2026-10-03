@@ -181,4 +181,33 @@ parameters:
     min: 0
     required: false
     type: number
+  - default: auto
+    form: form
+    human_description:
+      en_US: Choose a background mode supported by your deployment and API version. Transparent requires PNG output. Explicit modes are sent to both v1 and dated endpoints; auto leaves the API default unchanged.
+      pt_BR: Escolha um modo de fundo compatível com sua implantação e versão da API. Transparente requer saída PNG. Modos explícitos são enviados para endpoints v1 e com versão por data; automático mantém o padrão da API.
+      zh_Hans: 选择部署和 API 版本支持的背景模式。透明背景要求 PNG 输出。指定模式会发送到 v1 和日期版本端点；自动保留 API 默认行为。
+    label:
+      en_US: Background
+      pt_BR: Fundo
+      zh_Hans: 背景
+    name: background
+    options:
+      - label:
+          en_US: Auto
+          pt_BR: Automático
+          zh_Hans: 自动
+        value: auto
+      - label:
+          en_US: Opaque
+          pt_BR: Opaco
+          zh_Hans: 不透明
+        value: opaque
+      - label:
+          en_US: Transparent
+          pt_BR: Transparente
+          zh_Hans: 透明
+        value: transparent
+    required: false
+    type: select
 

@@ -299,11 +299,12 @@ def test_tools_preserve_successful_images_after_decode_error(image_tool, encoded
 
 @pytest.mark.parametrize("api_version", ["2024-02-15-preview", "2025-04-01-preview", "2025-04-01"])
 @pytest.mark.parametrize("output_parameters", [{}, {"output_format": "jpeg", "output_compression": 50}, {"output_format": "png", "output_compression": -1}])
-def test_tools_preserve_dated_request_parameters(image_tool, api_version, output_parameters):
+@pytest.mark.parametrize("background_parameters", [{}, {"background": "auto"}])
+def test_tools_preserve_dated_request_parameters(image_tool, api_version, output_parameters, background_parameters):
     tool_class, tool, parameters, api_call = image_tool
     tool.runtime.credentials["azure_openai_api_version"] = api_version
 
-    list(tool_class._invoke(tool, {**parameters, **output_parameters}))
+    list(tool_class._invoke(tool, {**parameters, **output_parameters, **background_parameters}))
     expected = {"prompt": parameters["prompt"], "size": "1024x1024", "quality": "high", "n": 1}
     if "image" in parameters:
         expected["image"] = api_call.call_args.kwargs["image"]
@@ -408,6 +409,9 @@ def test_tool_options_offer_common_image_parameters(tool_name):
         assert set(option_values) == supported_values
     assert parameters["quality"].default == "high"
     assert parameters["size"].default == "1024x1024"
+    assert [option.value for option in parameters["background"].options] == ["auto", "opaque", "transparent"]
+    assert parameters["background"].default == "auto"
+    assert not parameters["background"].required
 
 
 @pytest.fixture
@@ -522,12 +526,54 @@ def test_tools_reject_invalid_output_parameters(v1_image_tool, output_parameters
     api_call.assert_not_called()
 
 
+@pytest.mark.parametrize("background", ["auto", "opaque", "transparent"])
+def test_tools_send_background_parameters(v1_image_tool, background):
+    tool_class, tool, parameters, api_call = v1_image_tool
+    list(tool_class._invoke(tool, {**parameters, "background": background}))
+    api_call.assert_called_once()
+    arguments = api_call.call_args.kwargs
+    if background == "auto":
+        assert "background" not in arguments
+    else:
+        assert arguments["background"] == background
+    assert arguments["output_format"] == "png"
 
 
+@pytest.mark.parametrize(
+    "background_parameters, error",
+    [
+        ({"background": "transparent", "output_format": "jpeg"}, "require PNG"),
+        *[({"background": value}, "Invalid background") for value in [None, "", "invalid", [], True]],
+    ],
+)
+def test_tools_reject_invalid_background_parameters(v1_image_tool, background_parameters, error):
+    tool_class, tool, parameters, api_call = v1_image_tool
+    messages = list(tool_class._invoke(tool, {**parameters, **background_parameters}))
+    assert len(messages) == 1
+    assert error in messages[0]
+    api_call.assert_not_called()
 
 
+@pytest.mark.parametrize("background, output_format", [("opaque", "jpeg"), ("transparent", "png")])
+def test_tools_send_background_settings_on_dated_endpoints(image_tool, background, output_format):
+    tool_class, tool, parameters, api_call = image_tool
+    list(tool_class._invoke(tool, {**parameters, "background": background, "output_format": output_format}))
+    api_call.assert_called_once()
+    arguments = api_call.call_args.kwargs
+    assert arguments["background"] == background
+    assert "output_format" not in arguments
+    if "image" in parameters:
+        assert "output_compression" not in arguments
+    else:
+        assert arguments["output_compression"] == 100
 
 
+def test_tools_reject_transparent_jpeg_on_dated_endpoints(image_tool):
+    tool_class, tool, parameters, api_call = image_tool
+    messages = list(tool_class._invoke(tool, {**parameters, "background": "transparent", "output_format": "jpeg"}))
+    assert len(messages) == 1
+    assert "require PNG" in messages[0]
+    api_call.assert_not_called()
 
 
 @pytest.mark.parametrize("prefix", ["", "data:image/png;base64,", "data:image/jpeg;base64,"])
@@ -559,10 +605,18 @@ def test_tools_return_jpeg_with_correct_mime(image_tool, encoded_jpeg, prefix):
     assert messages[0]["meta"]["mime_type"] == "image/jpeg"
 
 
-@pytest.mark.parametrize("output_format", ["png", "jpeg"])
-@pytest.mark.parametrize("use_v1", [False, True])
+@pytest.mark.parametrize(
+    "output_format, use_v1, background",
+    [
+        *[(output_format, use_v1, "auto") for output_format in ["png", "jpeg"] for use_v1 in [False, True]],
+        ("png", True, "transparent"),
+        ("jpeg", True, "opaque"),
+        ("png", False, "transparent"),
+        ("jpeg", False, "opaque"),
+    ],
+)
 def test_tools_serialize_output_parameters_with_sdk(
-    image_tool, encoded_png, encoded_jpeg, output_format, use_v1, monkeypatch
+    image_tool, encoded_png, encoded_jpeg, output_format, use_v1, background, monkeypatch
 ):
     from utils import azure_client
 
@@ -599,10 +653,14 @@ def test_tools_serialize_output_parameters_with_sdk(
         monkeypatch.setattr(azure_client, "AzureOpenAI", lambda **kwargs: AzureOpenAI(http_client=http_client, **kwargs))
         monkeypatch.setattr(azure_client, "OpenAI", lambda **kwargs: OpenAI(http_client=http_client, **kwargs))
         messages = list(tool_class._invoke(tool, {
-            **parameters, "output_format": output_format, "output_compression": 50,
+            **parameters, "output_format": output_format, "output_compression": 50, "background": background,
         }))
 
     assert len(request_urls) == 1
+    if background == "auto":
+        assert "background" not in sent_arguments
+    else:
+        assert sent_arguments["background"] == background
     expected_action = "edits" if "image" in parameters else "generations"
     if use_v1:
         assert request_urls[0].path == f"/openai/v1/images/{expected_action}"
