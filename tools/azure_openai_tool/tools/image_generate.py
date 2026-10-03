@@ -82,12 +82,21 @@ class ImageGenerateTool(Tool):
                     "image_tokens": details.image_tokens
                 }
 
-        for image in response.data:
-            if not image.b64_json:
+        has_image = False
+        for image in getattr(response, "data", None) or []:
+            if not getattr(image, "b64_json", None):
                 continue
-            (mime_type, blob_image) = ImageGenerateTool._decode_image(image.b64_json)
-            metadata["mime_type"] = get_image_mime_type(blob_image, mime_type)
-            yield self.create_blob_message(blob=blob_image, meta=metadata)
+            try:
+                mime_type, blob_image = ImageGenerateTool._decode_image(image.b64_json)
+                if not blob_image:
+                    raise ValueError("Decoded image is empty.")
+                metadata["mime_type"] = get_image_mime_type(blob_image, mime_type)
+                yield self.create_blob_message(blob=blob_image, meta=metadata)
+                has_image = True
+            except Exception as error:
+                yield self.create_text_message(f"Error processing response image: {error}")
+        if not has_image:
+            yield self.create_text_message("No valid images were returned by the API.")
 
     @staticmethod
     def _decode_image(base64_image: str) -> tuple[str, bytes]:

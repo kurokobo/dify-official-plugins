@@ -254,8 +254,47 @@ def v1_image_tool(image_tool):
     return image_tool
 
 
+@pytest.mark.parametrize(
+    "payload, decode_error",
+    [
+        ({}, False),
+        ({"data": None}, False),
+        ({"data": []}, False),
+        ({"data": [SimpleNamespace(), SimpleNamespace(b64_json=None), SimpleNamespace(b64_json="")]}, False),
+        ({"data": [SimpleNamespace(b64_json="a")]}, True),
+        ({"data": [SimpleNamespace(b64_json="!!!")]}, True),
+    ],
+)
+def test_tools_report_no_valid_response_images(image_tool, payload, decode_error):
+    tool_class, tool, parameters, api_call = image_tool
+    api_call.return_value = SimpleNamespace(**payload)
+
+    messages = list(tool_class._invoke(tool, parameters))
+
+    api_call.assert_called_once()
+    assert messages[-1] == "No valid images were returned by the API."
+    assert len(messages) == (2 if decode_error else 1)
+    if decode_error:
+        assert messages[0].startswith("Error processing response image:")
 
 
+@pytest.mark.parametrize("invalid_first", [True, False])
+def test_tools_preserve_successful_images_after_decode_error(image_tool, encoded_png, invalid_first):
+    tool_class, tool, parameters, api_call = image_tool
+    images = [SimpleNamespace(b64_json=encoded_png), SimpleNamespace(b64_json="a")]
+    if invalid_first:
+        images.reverse()
+    api_call.return_value = SimpleNamespace(data=images)
+
+    messages = list(tool_class._invoke(tool, parameters))
+
+    blobs = [message for message in messages if isinstance(message, dict)]
+    errors = [message for message in messages if isinstance(message, str)]
+    assert len(blobs) == 1
+    assert blobs[0]["blob"] == base64.b64decode(encoded_png)
+    assert blobs[0]["meta"]["mime_type"] == "image/png"
+    assert len(errors) == 1
+    assert errors[0].startswith("Error processing response image:")
 
 
 @pytest.mark.parametrize("api_version", ["2024-02-15-preview", "2025-04-01-preview", "2025-04-01"])
@@ -264,7 +303,7 @@ def test_tools_preserve_dated_request_parameters(image_tool, api_version, output
     tool_class, tool, parameters, api_call = image_tool
     tool.runtime.credentials["azure_openai_api_version"] = api_version
 
-    assert list(tool_class._invoke(tool, {**parameters, **output_parameters})) == []
+    list(tool_class._invoke(tool, {**parameters, **output_parameters}))
     expected = {"prompt": parameters["prompt"], "size": "1024x1024", "quality": "high", "n": 1}
     if "image" in parameters:
         expected["image"] = api_call.call_args.kwargs["image"]
@@ -450,7 +489,7 @@ def test_tools_return_image_with_optional_usage(image_tool, usage_state, encoded
 )
 def test_tools_send_output_parameters(v1_image_tool, output_parameters, expected_format, expected_compression):
     tool_class, tool, parameters, api_call = v1_image_tool
-    assert list(tool_class._invoke(tool, {**parameters, **output_parameters})) == []
+    list(tool_class._invoke(tool, {**parameters, **output_parameters}))
     api_call.assert_called_once()
     arguments = api_call.call_args.kwargs
     assert arguments["model"] == "arbitrary-deployment"

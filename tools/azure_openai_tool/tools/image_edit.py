@@ -139,13 +139,16 @@ class ImageEditTool(Tool):
                 mask_file.close()
 
         # --- Process Response ---
+        has_image = False
         try:
-            for image_data in response.data:
-                if not image_data.b64_json:
+            for image_data in getattr(response, "data", None) or []:
+                if not getattr(image_data, "b64_json", None):
                     continue
 
                 try:
                     mime_type, blob_image = self._decode_image(image_data.b64_json)
+                    if not blob_image:
+                        raise ValueError("Decoded image is empty.")
 
                     # Create metadata dictionary
                     metadata = {"mime_type": get_image_mime_type(blob_image, mime_type)}
@@ -170,12 +173,15 @@ class ImageEditTool(Tool):
                             metadata["usage"] = usage_dict
 
                     yield self.create_blob_message(blob=blob_image, meta=metadata)
+                    has_image = True
                 except Exception as e:
                     yield self.create_text_message(f"Error processing response image: {str(e)}")
                     continue
         except Exception as e:
             yield self.create_text_message(f"Error processing response: {str(e)}")
             return
+        if not has_image:
+            yield self.create_text_message("No valid images were returned by the API.")
 
     @staticmethod
     def _decode_image(base64_image: str) -> tuple[str, bytes]:
