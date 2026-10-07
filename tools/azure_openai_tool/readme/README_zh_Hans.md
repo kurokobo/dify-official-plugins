@@ -36,8 +36,6 @@
 
 API 模式由 URL 决定。API Version 留空**不会**将资源 URL 切换到 v1。插件自动为 v1 Images API 使用 `api-version=preview`。如需一致应用输出格式和 JPEG 压缩率设置，请配置 v1 端点。
 
-Deployment Name 决定使用哪个 Azure 部署，无需选择模型或配置档案。
-
 **每次授权检查都会生成测试图像，并可能产生 Azure 费用。**
 
 #### 图像设置
@@ -50,11 +48,14 @@ Deployment Name 决定使用哪个 Azure 部署，无需选择模型或配置档
 | 图像大小 | `1024x1024`、`1536x1024`、`1024x1536`、`auto`、`custom` | `1024x1024` |
 | 自定义尺寸 | `WxH` 格式，仅在图像大小为 `custom` 时使用 | 未设置 |
 | 背景 | `auto`、`opaque`、`transparent` | `auto` |
-| 输出格式 | `png`、`jpeg` | `png` |
+| 输出格式（v1） | `png`、`jpeg` | `png` |
+| JPEG 压缩率（v1） | 0 到 100 的整数 | `100` |
 
 请根据 Azure 部署及 API 版本选择支持的设置。例如，`xhigh` 和 `max` 是 GPT Image 2.5 Flare 和 Sunburst 的质量选项，并非所有 GPT-image 模型都支持。模型特定的质量和尺寸限制由 API 验证，不受支持的设置会返回错误。
 
 背景 `auto` 保留 API 的默认行为。明确设置的 `opaque` 和 `transparent` 会发送到 v1 和日期版本端点；支持情况取决于部署、API 版本及操作。透明背景要求 PNG 输出。v1 端点的 JPEG 压缩率可设置为 0 到 100 的整数。
+
+日期版本端点的输出格式由 API 决定。压缩率设置仅发送给生成操作，编辑操作忽略此设置，以保留现有日期版本请求的行为。
 
 ### 4. 使用工具
 

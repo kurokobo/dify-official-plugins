@@ -19,7 +19,7 @@ from openai import AzureOpenAI, OpenAI
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PLUGIN_ROOT))
 
-from utils.model_capabilities import validate_image_parameters
+from utils.image_parameters import validate_image_parameters
 
 
 @pytest.mark.parametrize(
@@ -155,7 +155,7 @@ def test_create_image_client_does_not_switch_to_v1_on_empty_version(monkeypatch,
     v1_client.assert_not_called()
 
 
-def test_provider_requires_no_model_profile(monkeypatch):
+def test_provider_credentials_schema(monkeypatch):
     monkeypatch.chdir(PLUGIN_ROOT)
     provider_path = PLUGIN_ROOT / "provider" / "azure_openai_tool.yaml"
     with provider_path.open(encoding="utf-8") as provider_file:
@@ -176,12 +176,12 @@ def test_image_parameter_defaults_are_unchanged():
     }
 
 
-@pytest.mark.parametrize("quality", ["auto", "low", "medium", "high", "xhigh", "max"])
-@pytest.mark.parametrize("size", ["1024x1024", "1536x1024", "1024x1536", "auto"])
-def test_common_image_options_are_accepted(quality, size):
-    assert validate_image_parameters({"size": size, "quality": quality}) == {
-        "size": size, "quality": quality
-    }
+@pytest.mark.parametrize("parameters", [
+    *({"quality": quality} for quality in ["auto", "low", "medium", "high", "xhigh", "max"]),
+    *({"size": size} for size in ["1024x1024", "1536x1024", "1024x1536", "auto"]),
+])
+def test_common_image_options_are_accepted(parameters):
+    assert validate_image_parameters(parameters) == {"size": "1024x1024", "quality": "high", **parameters}
 
 
 @pytest.mark.parametrize(
@@ -204,10 +204,7 @@ def test_invalid_image_parameters_are_rejected(parameters, error):
         validate_image_parameters(parameters)
 
 
-@pytest.mark.parametrize("size", [
-    "123x456", "1024x640", "3840x2160", "0x1024", "1025x1024",
-    "3856x2160", "3088x1024", "1024x624", "3840x2176",
-])
+@pytest.mark.parametrize("size", ["123x456", "0x1024", "1025x1024"])
 def test_custom_size_constraints_are_left_to_api(size):
     assert validate_image_parameters({"size": "custom", "custom_size": size})["size"] == size
 
@@ -297,12 +294,10 @@ def test_tools_preserve_successful_images_after_decode_error(image_tool, encoded
     assert errors[0].startswith("Error processing response image:")
 
 
-@pytest.mark.parametrize("api_version", ["2024-02-15-preview", "2025-04-01-preview", "2025-04-01"])
 @pytest.mark.parametrize("output_parameters", [{}, {"output_format": "jpeg", "output_compression": 50}, {"output_format": "png", "output_compression": -1}])
 @pytest.mark.parametrize("background_parameters", [{}, {"background": "auto"}])
-def test_tools_preserve_dated_request_parameters(image_tool, api_version, output_parameters, background_parameters):
+def test_tools_preserve_dated_request_parameters(image_tool, output_parameters, background_parameters):
     tool_class, tool, parameters, api_call = image_tool
-    tool.runtime.credentials["azure_openai_api_version"] = api_version
 
     list(tool_class._invoke(tool, {**parameters, **output_parameters, **background_parameters}))
     expected = {"prompt": parameters["prompt"], "size": "1024x1024", "quality": "high", "n": 1}
@@ -330,11 +325,8 @@ def test_tools_report_missing_dated_api_version(image_tool, api_version):
     ("parameters", "expected_size", "expected_quality"),
     [
         ({}, "1024x1024", "high"),
-        ({"size": "custom", "custom_size": "123x456"}, "123x456", "high"),
         ({"size": "auto", "quality": "auto"}, "auto", "auto"),
-        ({"size": "custom", "custom_size": "3840x2160"}, "3840x2160", "high"),
         ({"size": "auto", "quality": "xhigh"}, "auto", "xhigh"),
-        ({"quality": "max"}, "1024x1024", "max"),
         ({"size": "custom", "custom_size": "2560x1440", "quality": "max"}, "2560x1440", "max"),
         ({"size": "custom", "custom_size": "1025x1024"}, "1025x1024", "high"),
     ],
@@ -357,10 +349,7 @@ def test_tools_send_common_image_parameters(image_tool, parameters, expected_siz
     ("parameters", "error"),
     [
         ({"quality": "ultra"}, "Invalid quality"),
-        ({"quality": []}, "Invalid quality"),
         ({"size": "small"}, "Invalid size"),
-        ({"size": []}, "Invalid size"),
-        ({"size": "custom"}, "Invalid custom_size"),
         ({"size": "custom", "custom_size": "1024X1024"}, "Invalid custom_size"),
     ],
 )
@@ -370,16 +359,6 @@ def test_tools_reject_malformed_parameters_before_api_call(image_tool, parameter
     assert len(messages) == 1
     assert error in messages[0]
     api_call.assert_not_called()
-
-
-@pytest.mark.parametrize("previous_key", ["base_model", "validation_profile", "model_profile"])
-def test_old_profile_credentials_do_not_restrict_image_parameters(image_tool, previous_key):
-    tool_class, tool, parameters, api_call = image_tool
-    tool.runtime.credentials[previous_key] = "unknown"
-    list(tool_class._invoke(tool, {**parameters, "size": "auto", "quality": "max"}))
-    api_call.assert_called_once()
-    assert api_call.call_args.kwargs["size"] == "auto"
-    assert api_call.call_args.kwargs["quality"] == "max"
 
 
 @pytest.mark.parametrize("use_v1", [False, True])

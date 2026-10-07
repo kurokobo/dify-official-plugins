@@ -9,7 +9,7 @@ from dify_plugin.file.file import File
 
 from utils.azure_client import create_image_client, is_v1_api_base
 from utils.image_output import get_image_mime_type, validate_output_parameters
-from utils.model_capabilities import validate_image_parameters
+from utils.image_parameters import validate_image_parameters
 
 
 class ImageEditTool(Tool):

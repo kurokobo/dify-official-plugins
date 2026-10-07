@@ -10,9 +10,9 @@ extra:
 identity:
   author: langgenius
   description:
-    en_US: Azure OpenAI Image Generate is OpenAI's most advanced model for image generation, featuring superior instruction following, text rendering, and real-world knowledge.
-    pt_BR: Azure OpenAI Image Generate é o modelo mais avançado da OpenAI para geração de imagens, com acompanhamento superior de instruções, renderização de texto e conhecimento do mundo real.
-    zh_Hans: Azure OpenAI Image Generate 是 OpenAI 最先进的图像生成模型，具有卓越的指令遵循、文本渲染和真实世界知识。
+    en_US: Generates images from text using an Azure OpenAI GPT-image deployment.
+    pt_BR: Gera imagens a partir de texto usando uma implantação GPT-image do Azure OpenAI.
+    zh_Hans: 使用 Azure OpenAI GPT-image 部署从文本生成图像。
   label:
     en_US: Azure OpenAI Image Generate
     pt_BR: Azure OpenAI Image Generate
@@ -21,23 +21,23 @@ identity:
 parameters:
   - form: llm
     human_description:
-      en_US: Detailed description of the image you want to generate (max 32000 chars). Check the official OpenAI documentation for Azure OpenAI Image.
-      pt_BR: Descrição detalhada da imagem que você deseja gerar (máx 32000 chars). Verifique a documentação oficial da OpenAI para Azure OpenAI Image.
-      zh_Hans: 您想要生成的图像的详细描述（最多 32000 字符）。请查看 Azure OpenAI Image 的 OpenAI 官方文档。
+      en_US: Detailed description of the image to generate. Prompt limits depend on your deployment and API version.
+      pt_BR: Descrição detalhada da imagem a gerar. Os limites do prompt dependem da implantação e da versão da API.
+      zh_Hans: 要生成的图像的详细描述。提示词限制取决于部署及 API 版本。
     label:
       en_US: Prompt
       pt_BR: Prompt
       zh_Hans: 提示词
-    llm_description: Detailed image prompt for Azure OpenAI Image (max 32000 characters). Describe the desired image clearly.
+    llm_description: Describe the desired image clearly. Prompt limits depend on the Azure deployment and API version.
     name: prompt
     required: true
     type: string
   - default: "1024x1024"
     form: form
     human_description:
-      en_US: Select the image size. Some options may not be supported by the selected model.
-      pt_BR: Selecione o tamanho da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
-      zh_Hans: 选择图像大小。所选模型可能不支持某些选项。
+      en_US: Select the image size. Support depends on your deployment and API version.
+      pt_BR: Selecione o tamanho da imagem. O suporte depende da implantação e da versão da API.
+      zh_Hans: 选择图像大小。支持情况取决于部署及 API 版本。
     label:
       en_US: Image size
       pt_BR: Tamanho da imagem
@@ -86,9 +86,9 @@ parameters:
   - default: 1
     form: form
     human_description:
-      en_US: Number of images to generate (Must be less than 10).
-      pt_BR: Número de imagens a gerar (Deve ser menor que 10).
-      zh_Hans: 要生成的图像数量（必须小于 10）。
+      en_US: Number of images to generate (1-10). Support depends on your deployment and API version.
+      pt_BR: Número de imagens a gerar (1-10). O suporte depende da implantação e da versão da API.
+      zh_Hans: 要生成的图像数量（1-10）。支持情况取决于部署及 API 版本。
     label:
       en_US: Number of images
       pt_BR: Número de imagens
@@ -101,9 +101,9 @@ parameters:
   - default: high
     form: form
     human_description:
-      en_US: Select the image quality. Some options may not be supported by the selected model.
-      pt_BR: Selecione a qualidade da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
-      zh_Hans: 选择图像质量。所选模型可能不支持某些选项。
+      en_US: Select the image quality. Support depends on your deployment and API version.
+      pt_BR: Selecione a qualidade da imagem. O suporte depende da implantação e da versão da API.
+      zh_Hans: 选择图像质量。支持情况取决于部署及 API 版本。
     label:
       en_US: Image quality
       pt_BR: Qualidade da imagem

@@ -1,18 +1,18 @@
 description:
   human:
-    en_US: Azure OpenAI Image Edit is a tool to modify one or more images based on a prompt, generating a single edited result.
-    pt_BR: Azure OpenAI Image Edit é uma ferramenta para modificar uma ou mais imagens com base em um prompt, gerando um único resultado editado.
-    zh_Hans: Azure OpenAI Image Edit 是一个工具，可根据提示词修改一张或多张图像，生成单个编辑结果。
-  llm: A tool to edit one or more images using Azure OpenAI's image model, combining them based on a prompt to generate a single edited result.
+    en_US: Edits one or more images based on a prompt using an Azure OpenAI GPT-image deployment.
+    pt_BR: Edita uma ou mais imagens com base em um prompt usando uma implantação GPT-image do Azure OpenAI.
+    zh_Hans: 使用 Azure OpenAI GPT-image 部署根据提示词编辑一张或多张图像。
+  llm: Edits or combines input images according to a prompt using an Azure OpenAI GPT-image deployment.
 extra:
   python:
     source: tools/image_edit.py
 identity:
   author: langgenius
   description:
-    en_US: Edits one or more images based on a prompt using the Azure OpenAI Image model, generating a single combined result. Optionally use a mask for inpainting.
-    pt_BR: Edita uma ou mais imagens com base em um prompt usando o modelo Azure OpenAI Image, gerando um único resultado combinado. Opcionalmente, use uma máscara para inpainting.
-    zh_Hans: 使用 Azure OpenAI Image 模型根据提示词编辑一张或多张图像，生成单个组合结果。可选择使用蒙版进行图像修复。
+    en_US: Edits or combines input images using an Azure OpenAI GPT-image deployment. Optionally use a mask for inpainting.
+    pt_BR: Edita ou combina imagens usando uma implantação GPT-image do Azure OpenAI. Opcionalmente, use uma máscara para inpainting.
+    zh_Hans: 使用 Azure OpenAI GPT-image 部署编辑或组合输入图像。可选择使用蒙版进行图像修复。
   label:
     en_US: Azure OpenAI Image Edit
     pt_BR: Azure OpenAI Image Edit
@@ -21,9 +21,9 @@ identity:
 parameters:
   - form: llm
     human_description:
-      en_US: A text description of how to edit and combine the input image(s) (max 32000 chars).
-      pt_BR: Uma descrição em texto de como editar e combinar a(s) imagem(ns) de entrada (máx 32000 chars).
-      zh_Hans: 如何编辑和组合输入图像的文本描述（最多 32000 字符）。
+      en_US: Describe how to edit or combine the input images. Prompt limits depend on your deployment and API version.
+      pt_BR: Descreva como editar ou combinar as imagens. Os limites do prompt dependem da implantação e da versão da API.
+      zh_Hans: 描述如何编辑或组合输入图像。提示词限制取决于部署及 API 版本。
     label:
       en_US: Prompt
       pt_BR: Prompt
@@ -34,9 +34,9 @@ parameters:
     type: string
   - form: llm
     human_description:
-      en_US: One or more images to edit (PNG, JPEG, or WebP, each <25MB).
-      pt_BR: Uma ou mais imagens para editar (PNG, JPEG ou WebP, cada uma <25MB).
-      zh_Hans: 要编辑的一张或多张图像（PNG、JPEG 或 WebP，每张小于 25MB）。
+      en_US: One or more PNG or JPEG images to edit. Size and input count limits depend on your deployment and API version.
+      pt_BR: Uma ou mais imagens PNG ou JPEG para editar. Os limites de tamanho e quantidade dependem da implantação e da versão da API.
+      zh_Hans: 要编辑的一张或多张 PNG 或 JPEG 图像。大小及输入数量限制取决于部署及 API 版本。
     label:
       en_US: Image(s)
       pt_BR: Imagem(ns)
@@ -47,9 +47,9 @@ parameters:
     mime_types: [ "image/png", "image/jpeg" ]
   - form: llm
     human_description:
-      en_US: Optional mask (PNG, <4MB, same size as image) where transparent areas indicate where to edit.
-      pt_BR: Máscara opcional (PNG, <4MB, mesmo tamanho da imagem) onde áreas transparentes indicam onde editar.
-      zh_Hans: 可选蒙版（PNG，小于 4MB，与图像大小相同），透明区域指示编辑位置。
+      en_US: Optional PNG mask with the same dimensions as the input image. Transparent areas indicate where to edit; file size limits depend on your deployment and API version.
+      pt_BR: Máscara PNG opcional com as mesmas dimensões da imagem. Áreas transparentes indicam onde editar; o limite de tamanho depende da implantação e da versão da API.
+      zh_Hans: 可选 PNG 蒙版，尺寸须与输入图像相同。透明区域指示编辑位置；文件大小限制取决于部署及 API 版本。
     label:
       en_US: Mask (Optional)
       pt_BR: Máscara (Opcional)
@@ -61,9 +61,9 @@ parameters:
   - default: "1024x1024"
     form: form
     human_description:
-      en_US: Select the image size. Some options may not be supported by the selected model.
-      pt_BR: Selecione o tamanho da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
-      zh_Hans: 选择图像大小。所选模型可能不支持某些选项。
+      en_US: Select the image size. Support depends on your deployment and API version.
+      pt_BR: Selecione o tamanho da imagem. O suporte depende da implantação e da versão da API.
+      zh_Hans: 选择图像大小。支持情况取决于部署及 API 版本。
     label:
       en_US: Image size
       pt_BR: Tamanho da imagem
@@ -112,9 +112,9 @@ parameters:
   - default: 1
     form: form
     human_description:
-      en_US: Number of images to generate (Must be less than 10).
-      pt_BR: Número de imagens a gerar (Deve ser menor que 10).
-      zh_Hans: 要生成的图像数量（必须小于 10）。
+      en_US: Number of images to generate (1-10). Support depends on your deployment and API version.
+      pt_BR: Número de imagens a gerar (1-10). O suporte depende da implantação e da versão da API.
+      zh_Hans: 要生成的图像数量（1-10）。支持情况取决于部署及 API 版本。
     label:
       en_US: Number of images
       pt_BR: Número de imagens
@@ -127,9 +127,9 @@ parameters:
   - default: high
     form: form
     human_description:
-      en_US: Select the image quality. Some options may not be supported by the selected model.
-      pt_BR: Selecione a qualidade da imagem. Algumas opções podem não ser compatíveis com o modelo selecionado.
-      zh_Hans: 选择图像质量。所选模型可能不支持某些选项。
+      en_US: Select the image quality. Support depends on your deployment and API version.
+      pt_BR: Selecione a qualidade da imagem. O suporte depende da implantação e da versão da API.
+      zh_Hans: 选择图像质量。支持情况取决于部署及 API 版本。
     label:
       en_US: Image quality
       pt_BR: Qualidade da imagem

@@ -36,8 +36,6 @@ The following fields are available for configuration:
 
 The URL selects the API mode. Leaving API Version empty does **not** switch a resource URL to v1. The plugin automatically uses `api-version=preview` for the v1 Images API. Configure a v1 endpoint to apply output format and JPEG compression settings consistently.
 
-Deployment Name determines which Azure deployment you use. No model or profile selection is required.
-
 **Each authorization check generates a test image and may incur Azure charges.**
 
 #### Image settings
@@ -50,11 +48,14 @@ Both generation and editing offer the following settings:
 | Image size | `1024x1024`, `1536x1024`, `1024x1536`, `auto`, `custom` | `1024x1024` |
 | Custom size | A `WxH` string, used when Image size is `custom` | Not set |
 | Background | `auto`, `opaque`, `transparent` | `auto` |
-| Output format | `png`, `jpeg` | `png` |
+| Output format (v1) | `png`, `jpeg` | `png` |
+| JPEG compression (v1) | Integer from 0 to 100 | `100` |
 
 Choose settings supported by your Azure deployment and API version. For example, `xhigh` and `max` are quality options for GPT Image 2.5 Flare and Sunburst, not for every GPT-image model. The API validates model-specific quality and size limits and returns an error for unsupported settings.
 
 Background `auto` leaves the API default unchanged. Explicit `opaque` and `transparent` values are sent on both v1 and dated endpoints; support depends on the deployment, API version, and operation. Transparent backgrounds require PNG output. On v1 endpoints, JPEG compression can be set to an integer from 0 to 100.
+
+On dated endpoints, the API determines the output format. The compression setting is sent for generation only; editing ignores it. These choices preserve existing dated request behavior.
 
 ### 4. Use the tools
 

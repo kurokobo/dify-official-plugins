@@ -1,14 +1,13 @@
 import base64
-import random
 from collections.abc import Generator
-from typing import Any, Dict
+from typing import Any
 
 from dify_plugin import Tool
 from dify_plugin.entities.tool import ToolInvokeMessage
 
 from utils.azure_client import create_image_client, is_v1_api_base
 from utils.image_output import get_image_mime_type, validate_output_parameters
-from utils.model_capabilities import validate_image_parameters
+from utils.image_parameters import validate_image_parameters
 
 
 class ImageGenerateTool(Tool):
@@ -30,7 +29,7 @@ class ImageGenerateTool(Tool):
             yield self.create_text_message("Please input prompt")
             return
         # --- Parameter Extraction and Validation ---
-        generation_args: Dict[str, Any] = {
+        generation_args: dict[str, Any] = {
             "prompt": prompt,
         }
         if use_v1:
@@ -136,13 +135,4 @@ class ImageGenerateTool(Tool):
             decoded_data = base64.b64decode(image_data_base64)
             return mime_type, decoded_data
         except (IndexError, ValueError):
-            # Handle potential malformed base64 string gracefully
-            # Fallback or raise specific error?
-            # Fallback to default png for now
             return "image/png", base64.b64decode(encoded_str)  # Attempt to decode anyway if prefix malformed
-
-    @staticmethod
-    def _generate_random_id(length=8):
-        characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        random_id = "".join(random.choices(characters, k=length))
-        return random_id
